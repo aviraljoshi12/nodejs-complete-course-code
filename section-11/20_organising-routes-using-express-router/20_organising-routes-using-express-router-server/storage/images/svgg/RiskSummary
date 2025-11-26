@@ -1,0 +1,862 @@
+import Dialog from "@components/Dialog/Dialog"
+import Button from "@components/FormFields/Button"
+import RiskDropdown from "@components/FormFields/RiskDropdown"
+import TabView, { TabItem } from "@components/TabView/TabView"
+import { Column } from "primereact/column"
+import { DataTable } from "primereact/datatable"
+import { useContext, useEffect, useState } from "react"
+import { CRQContext } from "./CRQ"
+import { useQuery } from "@tanstack/react-query"
+import { backendRoutes } from "@values/routes"
+import network from "@utils/network"
+import { useParams } from "react-router-dom"
+import { formatDollar } from "@utils/helper"
+import { ColorCode } from "./OrgAssets"
+import { DropdownRiskAi } from "./AssetRiskQuant"
+import { Skeleton } from "primereact/skeleton"
+import { InputSwitch } from "primereact/inputswitch"
+
+const colors = ["#E33F3F", "#E3843F", "#6ABC7A"]
+
+const mapImpact = {
+  "Very Low": 0.05,
+  Low: 0.15,
+  Medium: 0.35,
+  High: 0.65,
+  "Very High": 0.85
+}
+
+const mapLikelihood = {
+  "Very Low": 0.05,
+  Low: 0.2,
+  Medium: 0.5,
+  High: 0.7,
+  "Very High": 0.9
+}
+const options = ["Strong", "Moderate", "Weak"]
+
+const RiskSummary = () => {
+  const { id } = useParams()
+
+  const [expendedRows, setExpendedRows] = useState([])
+  const { setState, setActive } = useContext(CRQContext)
+
+  const [selectedStrength, setSelectedStrength] = useState({})
+  const [selectedControls, setSelectedControls] = useState({})
+  const [selectedRemediation, setSelectedRemediation] = useState({})
+
+  const [visible, setVisible] = useState(0)
+
+  const [stat, setStat] = useState({})
+  const [controls, setControls] = useState()
+
+  const risksQuery = useQuery({
+    queryKey: [backendRoutes.getRiskCrqNew.key, id],
+    queryFn: async () => network(backendRoutes.getRiskCrqNew.url + id)
+  })
+
+  const selectedAssetRisks = useQuery({
+    queryKey: [backendRoutes.getCrqData.key, id, "/selected-asset-risks"],
+    queryFn: async () => network(backendRoutes.getCrqData.url + id + "/selected-asset-risks")
+  })
+
+  const selectedEventRisks = useQuery({
+    queryKey: [backendRoutes.getCrqData.key, id, "/selected-event-risks"],
+    queryFn: async () => network(backendRoutes.getCrqData.url + id + "/selected-event-risks")
+  })
+
+  useEffect(() => {
+    if (risksQuery.isLoading)
+      setState((p) => ({ ...p, loading: true, message: "Generating Risks" }))
+    else setState((p) => ({ ...p, loading: false, message: "Risks Generated" }))
+  }, [risksQuery.isLoading])
+
+  useEffect(() => {
+    if (risksQuery.isSuccess) {
+      let eale = 0
+      let ecount = 0
+      let mmax = 0
+      let riskcount = 0
+
+      const abc = (risksQuery.data?.assetReports || []).map((val) => {
+        if (!selectedAssetRisks.data?.data?.selectedRisk[val.assessmentMetadata.assetName])
+          return null
+        val.riskStatements.map((_val, _idx) => {
+          let aro = 0
+          let ef = 0
+          let sle = 0
+          if (selectedStrength[_idx]?.has) {
+            if (selectedStrength[_idx]?.custom) {
+              ef = selectedStrength[_idx].ef
+              aro = selectedStrength[_idx].aro
+            } else {
+              aro =
+                mapLikelihood[
+                  _val.assessmentOptions[selectedStrength[_idx].data].inherentLikelihood
+                ]
+              ef = mapImpact[_val.assessmentOptions[selectedStrength[_idx].data].inherentImpact]
+            }
+            sle = val.assessmentMetadata.assetValue * ef
+            eale += sle * aro
+            ecount++
+          }
+          aro = mapLikelihood[_val.assessmentOptions[2].inherentLikelihood]
+          ef = mapImpact[_val.assessmentOptions[2].inherentImpact]
+          sle = val.assessmentMetadata.assetValue * ef
+          const maxale = sle * aro
+
+          if (maxale > mmax) {
+            mmax = maxale
+          }
+          riskcount++
+        })
+      })
+
+      setStat({ ale: eale / ecount, max: mmax, riskcount })
+    }
+  }, [risksQuery.status, risksQuery.data, selectedStrength])
+
+  const pageState = useQuery({
+    queryKey: [backendRoutes.getCrqData.key, id],
+    queryFn: async () => network(backendRoutes.getCrqData.url + id + "/risk-assessment"),
+    onSuccess: (data) => {
+      setControls(
+        Object.values(data.data?.selectedControls)
+          .map((val) => Object.values(val))
+          .flat().length
+      )
+      setSelectedStrength(data.data?.selectedStrength || {})
+      setSelectedControls(data.data?.selectedControls || {})
+      setSelectedRemediation(data.data?.selectedRemediation || {})
+    }
+  })
+
+  const [riskEvent, setRiskEvent] = useState("Assets")
+
+  if (risksQuery.isLoading)
+    return (
+      <div className=" flex flex-column gap-2 andromeda-card shadow w-full">
+        <Skeleton shape="rectangle" height="40px"></Skeleton>
+        <Skeleton shape="rectangle" height="40px" width="100%"></Skeleton>
+        <Skeleton shape="rectangle" height="40px" width="40%"></Skeleton>
+        <Skeleton shape="rectangle" height="40px" width="80%"></Skeleton>
+        <Skeleton shape="rectangle" height="40px" width="40%"></Skeleton>
+        <Skeleton shape="rectangle" height="40px" width="20%"></Skeleton>
+      </div>
+    )
+
+  return (
+    <div className="flex flex-column gap-3 w-full">
+      <div className="andromeda-card">
+        <div className="card-title">Summary</div>
+        <div className="flex" style={{ gap: "15px", marginTop: "20px" }}>
+          <div
+            style={{
+              width: "100%",
+              height: "143px",
+              flex: 1,
+              background: "#298CC826",
+              borderRadius: "8px",
+              fontSize: "16px"
+            }}
+            className="flex flex-column justify-content-center align-items-center"
+          >
+            <div>Expected ALE</div>
+            <div style={{ fontWeight: "800", color: "#298CC8" }}>{formatDollar(stat.ale, 2)}</div>
+          </div>
+
+          <div
+            style={{
+              width: "100%",
+              height: "143px",
+              flex: 1,
+              background: "#E33F3F26",
+              borderRadius: "8px",
+              fontSize: "16px"
+            }}
+            className="flex flex-column justify-content-center align-items-center"
+          >
+            <div>Maximum ALE</div>
+            <div style={{ fontWeight: "800", color: "#E33F3F" }}>{formatDollar(stat.max, 2)}</div>
+          </div>
+
+          <div
+            style={{
+              width: "100%",
+              height: "143px",
+              flex: 1,
+              background: "#6ABC7A26",
+              borderRadius: "8px",
+              fontSize: "16px"
+            }}
+            className="flex flex-column justify-content-center align-items-center"
+          >
+            <div>ALE Reduction</div>
+            <div style={{ fontWeight: "800", color: "#6ABC7A" }}>
+              {formatDollar(stat.max - stat.ale, 2)}
+            </div>
+          </div>
+
+          <div
+            style={{
+              width: "100%",
+              height: "143px",
+              flex: 1,
+              background: "#f4f6f8",
+              borderRadius: "8px",
+              fontSize: "16px"
+            }}
+            className="flex flex-column justify-content-center align-items-center"
+          >
+            <div>Risks Identified</div>
+            <div style={{ fontWeight: "800" }}>{stat.riskcount || 0}</div>
+          </div>
+
+          <div
+            style={{
+              width: "100%",
+              height: "143px",
+              flex: 1,
+              background: "#f4f6f8",
+              borderRadius: "8px",
+              fontSize: "16px"
+            }}
+            className="flex flex-column justify-content-center align-items-center"
+          >
+            <div>Controls Linked</div>
+            <div style={{ fontWeight: "800" }}>{controls}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="andromeda-card relative crq-table">
+        <div
+          style={{ top: 20, right: 20, zIndex: 888, position: "absolute", cursor: "pointer" }}
+          onClick={() => setState((p) => ({ ...p, populate: true }))}
+        >
+          <Button>Populate a Risk Register</Button>
+        </div>
+        <div style={{ height: "10px" }}></div>
+        <TabView>
+          <TabItem title="Assets">
+            <DataTable
+              value={(risksQuery.data?.assetReports || []).filter(
+                (val) =>
+                  selectedAssetRisks.data?.data?.selectedRisk[val.assessmentMetadata.assetName]
+              )}
+            >
+              <Column
+                header="Asset"
+                body={(data) => data.assessmentMetadata.assetName}
+                style={{ width: "70%" }}
+              ></Column>
+              {/* <Column header="Risk Level" body={data=> <ColorCode data={data.assessmentMetadata.assetCi}></ColorCode>} style={{ width: "20%" }}></Column> */}
+              <Column
+                header="Asset Value"
+                body={(data) => formatDollar(data.assessmentMetadata.assetValue)}
+                style={{ width: "15%" }}
+              ></Column>
+            </DataTable>
+          </TabItem>
+          <TabItem title="Risk Events">
+            <DataTable
+              value={(risksQuery.data?.eventReports || []).filter(
+                (val) =>
+                  selectedEventRisks.data?.data?.selectedRisk[val.assessmentMetadata.eventName]
+              )}
+            >
+              <Column
+                header="Event"
+                body={(data) => data.assessmentMetadata.eventName}
+                style={{ width: "70%" }}
+              ></Column>
+              <Column
+                header="Event Value"
+                body={(data) => formatDollar(data.assessmentMetadata.eventValue)}
+                style={{ width: "15%" }}
+              ></Column>
+            </DataTable>
+          </TabItem>
+        </TabView>
+      </div>
+      <div className="andromeda-card">
+        <div className="flex justify-content-between">
+          <div className="card-title mb-3">Risks</div>
+          <div className="flex gap-2" style={{ whiteSpace: "nowrap" }}>
+            <RiskDropdown
+              value={riskEvent}
+              onChange={(e) => setRiskEvent(e.value)}
+              option={["Assets", "Risk Events"]}
+            ></RiskDropdown>
+          </div>
+        </div>
+
+        {riskEvent === "Assets" &&
+          (risksQuery.data?.assetReports || []).map((val, idx) => {
+            if (
+              !selectedAssetRisks.data?.data?.selectedRisk &&
+              !selectedAssetRisks.data?.data?.selectedRisk[val.assessmentMetadata.assetName]
+            )
+              return null
+            let expale = 0
+            let expcount = 0
+            let max = 0
+            val.riskStatements.map((_val, _idx) => {
+              let aro = 0
+              let ef = 0
+              let sle = 0
+              if (selectedStrength[_idx]?.has) {
+                if (selectedStrength[_idx]?.custom) {
+                  ef = selectedStrength[_idx].ef
+                  aro = selectedStrength[_idx].aro
+                } else {
+                  aro =
+                    mapLikelihood[
+                      _val.assessmentOptions[selectedStrength[_idx].data].inherentLikelihood
+                    ]
+                  ef = mapImpact[_val.assessmentOptions[selectedStrength[_idx].data].inherentImpact]
+                }
+                sle = val.assessmentMetadata.assetValue * ef
+                expale += sle * aro
+                expcount++
+              }
+              aro = mapLikelihood[_val.assessmentOptions[2].inherentLikelihood]
+              ef = mapImpact[_val.assessmentOptions[2].inherentImpact]
+              sle = val.assessmentMetadata.assetValue * ef
+              const maxale = sle * aro
+
+              if (maxale > max) {
+                max = maxale
+              }
+            })
+
+            return (
+              <div key={idx} className="mb-4">
+                <div style={{ marginTop: "15px" }} className="flex flex-column">
+                  {(val.riskStatements || []).map((_val, _idx) => {
+                    let sle = 0
+                    let ale = 0
+                    let aro = 0
+                    let ef = 0
+                    if (selectedStrength[_idx]?.has) {
+                      if (selectedStrength[_idx]?.custom) {
+                        ef = selectedStrength[_idx].ef
+                        aro = selectedStrength[_idx].aro
+                      } else {
+                        aro =
+                          mapLikelihood[
+                            _val.assessmentOptions[selectedStrength[_idx].data].inherentLikelihood
+                          ]
+                        ef =
+                          mapImpact[
+                            _val.assessmentOptions[selectedStrength[_idx].data].inherentImpact
+                          ]
+                      }
+                      sle = val.assessmentMetadata.assetValue * ef
+                      ale = sle * aro
+                    }
+                    return (
+                      <div
+                        key={_idx}
+                        className="mb-3"
+                        style={{
+                          borderRadius: "6px",
+                          background: "#F4F6F8",
+                          padding: "15px",
+                          width: "100%"
+                        }}
+                      >
+                        <div className="flex align-items-center">
+                          <i
+                            className="fa-solid fa-angle-right cursor-pointer"
+                            onClick={() => setVisible(_idx)}
+                            style={{ width: "2%" }}
+                          ></i>
+                          <div style={{ width: "80%" }}>{_val.riskTitle}</div>
+                          <div style={{ width: "18%" }} className="flex justify-content-center">
+                            <div
+                              style={{
+                                background: colors[selectedStrength[_idx]?.data] + "1A",
+                                color: colors[selectedStrength[_idx]?.data],
+                                padding: "5px 10px",
+                                borderRadius: "20px",
+                                width: "max-content"
+                              }}
+                            >
+                              {options[selectedStrength[_idx]?.data]} Controls
+                            </div>
+                          </div>
+                        </div>
+                        {visible === _idx && (
+                          <div
+                            style={{
+                              background: "#FFFFFF",
+                              padding: "20px",
+                              marginTop: "20px",
+                              borderRadius: "8px"
+                            }}
+                          >
+                            <div className="flex justify-content-between">
+                              <div className="flex align-items-center gap-2">
+                                <DropdownRiskAi
+                                  staticView={true}
+                                  value={selectedStrength[_idx]?.data}
+                                  onchange={(data) =>
+                                    setSelectedStrength((p) => {
+                                      p[_idx] = { data, has: true }
+                                      return { ...p }
+                                    })
+                                  }
+                                ></DropdownRiskAi>
+                                <i
+                                  className="fa-solid fa-info-circle cursor-pointer"
+                                  onClick={() => setState((p) => ({ ...p, controlinfo: true }))}
+                                ></i>
+                              </div>
+
+                              <div className="flex align-items-center gap-2">
+                                <div
+                                  style={{
+                                    background: "#EDEFF2",
+                                    width: "max-content",
+                                    fontWeight: "16px",
+                                    padding: "0px 10px",
+                                    height: "40px",
+                                    borderRadius: "8px"
+                                  }}
+                                  className="flex align-items-center"
+                                >
+                                  <div className="flex align-items-center gap-2">
+                                    <div>SLE</div>
+                                    <div style={{ fontWeight: "600" }}>{formatDollar(sle, 2)}</div>
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    background: "#EDEFF2",
+                                    width: "max-content",
+                                    fontWeight: "16px",
+                                    padding: "0px 10px",
+                                    height: "40px",
+                                    borderRadius: "8px"
+                                  }}
+                                  className="flex align-items-center"
+                                >
+                                  <div className="flex align-items-center gap-2">
+                                    <div>ALE</div>
+                                    <div style={{ fontWeight: "600" }}>{formatDollar(ale, 2)}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex mt-3">
+                              <div style={{ borderRadius: "1px solid red", flex: 1 }}>
+                                <div style={{ fontWeight: "800", fontSize: "18px" }}>
+                                  Preventive Controls
+                                </div>
+                                {(_val.preventiveControls || []).map((__val, __idx) => {
+                                  return (
+                                    <div
+                                      key={__idx}
+                                      style={{ marginBottom: "20px" }}
+                                      className="flex align-items-start gap-2 mt-1"
+                                    >
+                                      <i
+                                        onClick={() =>
+                                          setSelectedControls((p) => {
+                                            if (!p[_idx]) p[_idx] = {}
+
+                                            if (p[_idx][__idx]) delete p[_idx][__idx]
+                                            else p[_idx][__idx] = true
+                                            return { ...p }
+                                          })
+                                        }
+                                        style={{
+                                          color:
+                                            selectedControls[_idx] && selectedControls[_idx][__idx]
+                                              ? "var(--grpGreen)"
+                                              : "#ffffff",
+                                          fontSize: "12px",
+                                          marginTop: "7px"
+                                        }}
+                                        className={
+                                          (selectedControls[_idx] && selectedControls[_idx][__idx]
+                                            ? "fa-solid fa-check-circle"
+                                            : "fa-regular fa-square") + " cursor-pointer"
+                                        }
+                                      ></i>
+                                      <div
+                                        className="flex flex-column"
+                                        style={{
+                                          fontSize: "16px",
+                                          opacity:
+                                            selectedControls[_idx] && selectedControls[_idx][__idx]
+                                              ? "1"
+                                              : "0.3"
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: "800" }}>{__val.controlName}</div>
+                                        <div style={{ fontWeight: "400" }}>
+                                          {__val.controlDescription}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              <div style={{ borderRadius: "1px solid red", flex: 1 }}>
+                                <div style={{ fontWeight: "800", fontSize: "18px" }}>
+                                  Remediation
+                                </div>
+                                {(_val.RemediationAndTreatmentPlan || []).map((__val, __idx) => {
+                                  return (
+                                    <div
+                                      key={__idx}
+                                      style={{ marginBottom: "20px" }}
+                                      className="flex align-items-start gap-2 mt-1"
+                                    >
+                                      <i
+                                        onClick={() =>
+                                          setSelectedRemediation((p) => {
+                                            if (!p[_idx]) p[_idx] = {}
+
+                                            if (p[_idx][__idx]) delete p[_idx][__idx]
+                                            else p[_idx][__idx] = true
+                                            return { ...p }
+                                          })
+                                        }
+                                        style={{
+                                          color:
+                                            selectedRemediation[_idx] &&
+                                            selectedRemediation[_idx][__idx]
+                                              ? "var(--grpGreen)"
+                                              : "#ffffff",
+                                          fontSize: "12px",
+                                          marginTop: "7px"
+                                        }}
+                                        className={
+                                          (selectedRemediation[_idx] &&
+                                          selectedRemediation[_idx][__idx]
+                                            ? "fa-solid fa-check-circle"
+                                            : "fa-regular fa-square") + " cursor-pointer"
+                                        }
+                                      ></i>
+                                      <div
+                                        className="flex flex-column"
+                                        style={{
+                                          fontSize: "16px",
+                                          opacity:
+                                            selectedRemediation[_idx] &&
+                                            selectedRemediation[_idx][__idx]
+                                              ? "1"
+                                              : "0.3"
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: "400" }}>
+                                          {__val.riskMinimizationStrategy}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        {riskEvent === "Risk Events" &&
+          (risksQuery.data?.eventReports || []).map((val, idx) => {
+            if (
+              !selectedEventRisks.data?.data?.selectedRisk &&
+              !selectedEventRisks.data?.data?.selectedRisk[val.assessmentMetadata.eventName]
+            )
+              return null
+            let expale = 0
+            let expcount = 0
+            let max = 0
+            val.riskStatements.map((_val, _idx) => {
+              let aro = 0
+              let ef = 0
+              let sle = 0
+              if (selectedStrength[_idx]?.has) {
+                if (selectedStrength[_idx]?.custom) {
+                  ef = selectedStrength[_idx].ef
+                  aro = selectedStrength[_idx].aro
+                } else {
+                  aro =
+                    mapLikelihood[
+                      _val.assessmentOptions[selectedStrength[_idx].data].inherentLikelihood
+                    ]
+                  ef = mapImpact[_val.assessmentOptions[selectedStrength[_idx].data].inherentImpact]
+                }
+                sle = val.assessmentMetadata.eventValue * ef
+                expale += sle * aro
+                expcount++
+              }
+              aro = mapLikelihood[_val.assessmentOptions[2].inherentLikelihood]
+              ef = mapImpact[_val.assessmentOptions[2].inherentImpact]
+              sle = val.assessmentMetadata.eventValue * ef
+              const maxale = sle * aro
+
+              if (maxale > max) {
+                max = maxale
+              }
+            })
+
+            return (
+              <div key={idx} className="mb-4">
+                <div style={{ marginTop: "15px" }} className="flex flex-column">
+                  {(val.riskStatements || []).map((_val, _idx) => {
+                    let sle = 0
+                    let ale = 0
+                    let aro = 0
+                    let ef = 0
+                    if (selectedStrength[_idx]?.has) {
+                      if (selectedStrength[_idx]?.custom) {
+                        ef = selectedStrength[_idx].ef
+                        aro = selectedStrength[_idx].aro
+                      } else {
+                        aro =
+                          mapLikelihood[
+                            _val.assessmentOptions[selectedStrength[_idx].data].inherentLikelihood
+                          ]
+                        ef =
+                          mapImpact[
+                            _val.assessmentOptions[selectedStrength[_idx].data].inherentImpact
+                          ]
+                      }
+                      sle = val.assessmentMetadata.eventValue * ef
+                      ale = sle * aro
+                    }
+                    return (
+                      <div
+                        key={_idx}
+                        className="mb-3"
+                        style={{
+                          borderRadius: "6px",
+                          background: "#F4F6F8",
+                          padding: "15px",
+                          width: "100%"
+                        }}
+                      >
+                        <div className="flex align-items-center">
+                          <i
+                            className="fa-solid fa-angle-right cursor-pointer"
+                            onClick={() => setVisible(_idx)}
+                            style={{ width: "2%" }}
+                          ></i>
+                          <div style={{ width: "80%" }}>{_val.riskTitle}</div>
+                          <div style={{ width: "18%" }} className="flex justify-content-center">
+                            <div
+                              style={{
+                                background: colors[selectedStrength[_idx]?.data] + "1A",
+                                color: colors[selectedStrength[_idx]?.data],
+                                padding: "5px 10px",
+                                borderRadius: "20px",
+                                width: "max-content"
+                              }}
+                            >
+                              {options[selectedStrength[_idx]?.data]} Controls
+                            </div>
+                          </div>
+                        </div>
+                        {visible === _idx && (
+                          <div
+                            style={{
+                              background: "#FFFFFF",
+                              padding: "20px",
+                              marginTop: "20px",
+                              borderRadius: "8px"
+                            }}
+                          >
+                            <div className="flex justify-content-between">
+                              <div className="flex align-items-center gap-2">
+                                <DropdownRiskAi
+                                  staticView={true}
+                                  value={selectedStrength[_idx]?.data}
+                                  onchange={(data) =>
+                                    setSelectedStrength((p) => {
+                                      p[_idx] = { data, has: true }
+                                      return { ...p }
+                                    })
+                                  }
+                                ></DropdownRiskAi>
+                                <i
+                                  className="fa-solid fa-info-circle cursor-pointer"
+                                  onClick={() => setState((p) => ({ ...p, controlinfo: true }))}
+                                ></i>
+                              </div>
+
+                              <div className="flex align-items-center gap-2">
+                                <div
+                                  style={{
+                                    background: "#EDEFF2",
+                                    width: "max-content",
+                                    fontWeight: "16px",
+                                    padding: "0px 10px",
+                                    height: "40px",
+                                    borderRadius: "8px"
+                                  }}
+                                  className="flex align-items-center"
+                                >
+                                  <div className="flex align-items-center gap-2">
+                                    <div>SLE</div>
+                                    <div style={{ fontWeight: "600" }}>{formatDollar(sle, 2)}</div>
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    background: "#EDEFF2",
+                                    width: "max-content",
+                                    fontWeight: "16px",
+                                    padding: "0px 10px",
+                                    height: "40px",
+                                    borderRadius: "8px"
+                                  }}
+                                  className="flex align-items-center"
+                                >
+                                  <div className="flex align-items-center gap-2">
+                                    <div>ALE</div>
+                                    <div style={{ fontWeight: "600" }}>{formatDollar(ale, 2)}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex mt-3">
+                              <div style={{ borderRadius: "1px solid red", flex: 1 }}>
+                                <div style={{ fontWeight: "800", fontSize: "18px" }}>
+                                  Preventive Controls
+                                </div>
+                                {(_val.preventiveControls || []).map((__val, __idx) => {
+                                  return (
+                                    <div
+                                      key={__idx}
+                                      style={{ marginBottom: "20px" }}
+                                      className="flex align-items-start gap-2 mt-1"
+                                    >
+                                      <i
+                                        onClick={() =>
+                                          setSelectedControls((p) => {
+                                            if (!p[_idx]) p[_idx] = {}
+
+                                            if (p[_idx][__idx]) delete p[_idx][__idx]
+                                            else p[_idx][__idx] = true
+                                            return { ...p }
+                                          })
+                                        }
+                                        style={{
+                                          color:
+                                            selectedControls[_idx] && selectedControls[_idx][__idx]
+                                              ? "var(--grpGreen)"
+                                              : "#ffffff",
+                                          fontSize: "12px",
+                                          marginTop: "7px"
+                                        }}
+                                        className={
+                                          (selectedControls[_idx] && selectedControls[_idx][__idx]
+                                            ? "fa-solid fa-check-circle"
+                                            : "fa-regular fa-square") + " cursor-pointer"
+                                        }
+                                      ></i>
+                                      <div
+                                        className="flex flex-column"
+                                        style={{
+                                          fontSize: "16px",
+                                          opacity:
+                                            selectedControls[_idx] && selectedControls[_idx][__idx]
+                                              ? "1"
+                                              : "0.3"
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: "800" }}>{__val.controlName}</div>
+                                        <div style={{ fontWeight: "400" }}>
+                                          {__val.controlDescription}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              <div style={{ borderRadius: "1px solid red", flex: 1 }}>
+                                <div style={{ fontWeight: "800", fontSize: "18px" }}>
+                                  Remediation
+                                </div>
+                                {(_val.RemediationAndTreatmentPlan || []).map((__val, __idx) => {
+                                  return (
+                                    <div
+                                      key={__idx}
+                                      style={{ marginBottom: "20px" }}
+                                      className="flex align-items-start gap-2 mt-1"
+                                    >
+                                      <i
+                                        onClick={() =>
+                                          setSelectedRemediation((p) => {
+                                            if (!p[_idx]) p[_idx] = {}
+
+                                            if (p[_idx][__idx]) delete p[_idx][__idx]
+                                            else p[_idx][__idx] = true
+                                            return { ...p }
+                                          })
+                                        }
+                                        style={{
+                                          color:
+                                            selectedRemediation[_idx] &&
+                                            selectedRemediation[_idx][__idx]
+                                              ? "var(--grpGreen)"
+                                              : "#ffffff",
+                                          fontSize: "12px",
+                                          marginTop: "7px"
+                                        }}
+                                        className={
+                                          (selectedRemediation[_idx] &&
+                                          selectedRemediation[_idx][__idx]
+                                            ? "fa-solid fa-check-circle"
+                                            : "fa-regular fa-square") + " cursor-pointer"
+                                        }
+                                      ></i>
+                                      <div
+                                        className="flex flex-column"
+                                        style={{
+                                          fontSize: "16px",
+                                          opacity:
+                                            selectedRemediation[_idx] &&
+                                            selectedRemediation[_idx][__idx]
+                                              ? "1"
+                                              : "0.3"
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: "400" }}>
+                                          {__val.riskMinimizationStrategy}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+      </div>
+    </div>
+  )
+}
+
+export default RiskSummary
+
