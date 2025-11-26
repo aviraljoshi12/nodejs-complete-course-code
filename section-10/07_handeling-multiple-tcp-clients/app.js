@@ -1,0 +1,35 @@
+import net from "node:net";
+
+process.stdin.on("data", (input) => {
+  clientsList.forEach((socket) => {
+    socket.write(input);
+  });
+});
+
+const clientsList = [];
+
+const server = net.createServer((socket) => {
+  clientsList.push(socket);
+  console.log(clientsList.length);
+
+  socket.on("data", (chunk) => {
+    console.log(chunk.toString());
+    clientsList.forEach((socket) => {
+      socket.write(chunk);
+    });
+  });
+
+  socket.on("close", () => {
+    console.log(socket.remoteAddress, ": Client disconnected");
+  });
+
+  socket.on("error", () => {
+    console.log("Client Lost");
+  });
+
+  console.log("Client Connected", socket.remoteAddress);
+});
+
+server.listen(4000, "0.0.0.0", () => {
+  console.log("Server started on port 4000");
+});

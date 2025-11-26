@@ -1,0 +1,10 @@
+{
+  "name": "my-package",
+  "version": "1.0.0",
+  "description": "not known",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node --watch app.js"
+  }
+}

@@ -1,0 +1,4 @@
+Absolute Path: /home/aviral/Desktop/My Folders/node.js/section-3/10_file-system/text.txt
+Relative Path: text.txt
+
+If a text.js file is inside src folder, then its relative path: src/text.js

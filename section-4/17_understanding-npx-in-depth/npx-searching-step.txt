@@ -1,0 +1,61 @@
+NPX and NPM are just a js file
+
+What npx does?
+Searches for a file and executes it
+
+Step 1:
+  Searches for package.json in current working directory
+  Searches for name key in the json
+  Searches for bin (binary) key
+
+  In package.json the code is:
+  {
+  "name": "hello",
+  "bin": "app.js"
+}
+
+Code in app.js:
+#!/usr/bin/env node
+console.log("hii");
+
+So if I do npx hello, I will get in terminal:
+hii
+
+Step 2:
+    Searches for hello named file in .bin folder in node_modules in current working directory
+    And executes this file
+    Inside /node_modules/.bin/hello
+
+    I have written this code:
+    echo 'hii I am hello'
+
+So if I now do npx hello, and comment code in package.json, I will see in terminal:
+hii I am hello
+
+OR
+
+#!/usr/bin/env node
+console.log('I am hello')
+
+It will give same output
+
+Step 3:
+   Searches for hello file in global npm installed folders
+
+   So we can run this command first to check where our global packages are stored:
+   npm root -g
+   It will give a path, on clicking the path we can see all our global packages
+
+   So if I do 
+   npm i hello -g
+
+   In my directory where there were global packages: I can see a global package name as hello
+
+Step 4:
+   Searches for hello package in npx cache
+
+Step 5:
+   Searches for hello package in npm registry
+   Gives prompts to install the package if found
+   Downloads and installs
+
