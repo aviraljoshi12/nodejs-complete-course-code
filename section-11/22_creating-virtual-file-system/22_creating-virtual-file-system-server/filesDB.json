@@ -1,0 +1,17 @@
+[
+  {
+    "id": "606d78ac-eba7-457b-92f5-8d84087ec9ee",
+    "extension": ".js",
+    "name": "test.js"
+  },
+  {
+    "id": "62c01d5b-7e71-4c13-adfc-a8cc9f489cb6",
+    "extension": ".webp",
+    "name": "ss.webp"
+  },
+  {
+    "id": "d5a96578-1742-4b06-b19e-a9fa2d5734de",
+    "extension": ".txt",
+    "name": "text.txt"
+  }
+]
