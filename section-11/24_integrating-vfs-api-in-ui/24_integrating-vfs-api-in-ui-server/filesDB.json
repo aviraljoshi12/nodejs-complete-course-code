@@ -1,0 +1,20 @@
+[
+  {
+    "id": "f9653fb3-5df7-48fd-a661-4cc42f31de90",
+    "extension": ".js",
+    "name": "tesst.js",
+    "parentDirId": "a965303d-2899-48f9-902b-bd1992d06778"
+  },
+  {
+    "id": "5caeccd3-2cb4-4cd4-af4c-c3f82172c134",
+    "extension": ".jpg",
+    "name": "image.jpg",
+    "parentDirId": "a965303d-2899-48f9-902b-bd1992d06778"
+  },
+  {
+    "id": "86d7687f-2d3a-4aec-8a32-dee565e6dc7a",
+    "extension": ".mp4",
+    "name": "Screencast from 2025-12-02 15-50-02 (1).mp4",
+    "parentDirId": "a965303d-2899-48f9-902b-bd1992d06778"
+  }
+]
